@@ -3,6 +3,7 @@ import boto3
 import os
 from boto3 import session
 from botocore.exceptions import ClientError
+from datetime import datetime
 
 
 def create_bucket(bucket_name, region=None):
@@ -90,9 +91,11 @@ srcBucketString = "hariprasath-src-bucket-19989"
 dstBucketString = "hariprasath-dst-bucket-19989"
 
 s3_client = boto3.client('s3')
+dynamoDbClient = boto3.client('dynamodb')
+
 # s3_session = boto3.Session()
 # s3_resource = s3_session.resource('s3')
-# s3_resource = boto3.resource('s3')
+s3_resource = boto3.resource('s3')
 
 
 # srcBucket = s3_resource.Bucket(srcBucketString)
@@ -106,16 +109,73 @@ s3_client = boto3.client('s3')
 # dstBucket.copy(source, 'Hello.txt')
 
 
-dynamoDbClient = boto3.client('dynamodb')
-
-try:
-    metadata = s3_client.head_object(Bucket=srcBucketString, Key='Hello.txt')
-    # print(metadata)
-except:
-    print("Failed {}".format('Hello.txt'))
 
 
-# for x in metadata.keys():
-#     print('{}: {}'.format(x,metadata[x]))
 
-print(metadata['Metadata'])
+
+
+
+
+
+def getMetadata(bucketName, key):
+
+    try:
+        metadata = s3_client.head_object(Bucket=srcBucketString, Key='Hello.txt')
+    except:
+        print("Failed {}".format('Hello.txt'))
+
+    objectRow = {
+        'Object Name': key,
+        'Last Modified': datetime.timestamp(metadata['LastModified']),
+        'Size': metadata['ContentLength'],
+        'SSE': metadata['ServerSideEncryption']
+    }
+    # print(objectRow)
+    print(datetime.timestamp(metadata['LastModified']))
+
+# getMetadata(srcBucketString, 'Hello.txt')
+
+
+table = dynamoDbClient.create_table(
+        TableName='ObjectMetadata',
+        KeySchema=[
+            {
+                'AttributeName': 'Name',
+                'KeyType': 'HASH'  
+            },
+            {
+                'AttributeName': 'LastModified',
+                'KeyType': 'RANGE'  
+            },
+            {
+                'AttributeName': 'Size',
+                'KeyType': 'RANGE'
+            },
+            {
+                'AttributeName': 'SSE',
+                'KeyType': 'RANGE'
+            },
+        ],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'Name',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'LastModified',
+                'AttributeType': 'N'
+            },
+            {
+                'AttributeName': 'Size',
+                'AttributeType': 'N'
+            },
+            {
+                'AttributeName': 'SSE',
+                'AttributeType': 'S'
+            },
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        }
+    )
